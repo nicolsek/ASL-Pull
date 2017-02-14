@@ -7,6 +7,9 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
+
+	"github.com/PuerkitoBio/goquery"
 )
 
 // main ... The main function?
@@ -22,20 +25,117 @@ func main() {
 	//Checks the error.
 	check(err)
 	//Creating the file and writing the data from the HTTP request to it.
-	writeFile(resp, word)
+	file := writePage(resp, word)
+	//Modify the file so that its resources point to the correct directory.
+	modifyPage(file)
 
 }
 
-// writeFile ... Creates the file with the name of word and copies the body of the HTTP request to it.
-func writeFile(resp *http.Response, word string) {
+// modifyPage ... Modifies the page so that it points to the correct resources.
+func modifyPage(file *os.File) {
+	// //Creates the goquery document.
+	// doc, err := goquery.NewDocumentFromReader(file)
+	// //Checks the doc error.
+	// check(err)
+	// //Looking for the images and where they're trying to point to.
+	// doc.Find("img").Each(func(i int, s *goquery.Selection) {
+	// 	str, isExist := s.Attr("src")
+	// 	//Checks if that is an attribute of the image.
+	// 	if isExist {
+	// 		//If it exists it's going to add the static address to the new directory.
+	// 		str = breakdownURL(str)
+	// 		//Sets the name as the file name.
+	// 		name := file.Name()
+	// 		//Creating the static path to add to.
+	// 		path := filepath.Join(filepath.Join("Resources", name), str)
+	// 		s.SetAttr("src", path)
+	// 	}
+	// })
+}
+
+// downloadResources ... Reads through the html looking for specific contents and downloads those resources.
+func downloadResources(resp *http.Response, word string) {
+	staticAddress := "http://www.lifeprint.com/asl101/"
+	//Creating the document from the http response.
+	doc, err := goquery.NewDocumentFromResponse(resp)
+	//Checks if theres an error.
+	check(err)
+	//Looking for the image elements in the page.
+	doc.Find("img").Each(func(i int, s *goquery.Selection) {
+		//Checks to see if the string exists, if it does it grabs the value.
+		str, isExist := s.Attr("src")
+		if isExist {
+			//Removes the ../../ and adds the original address.
+			str = str[5:]
+
+			//Gets the data by braking down the URL
+			data := breakdownURL(str)
+
+			//Creating the url by joining the string with the staticAddress
+			url := staticAddress + str
+			//Downloads the image using an HTTP request.
+			res, err := http.Get(url)
+			//Check if there is an error.
+			check(err)
+			//Write the resource using writeResource()
+			writeResource(res, url, data, word)
+		}
+	})
+}
+
+// breakdownURL ... Takes a url and breaks it down by looking for the 3rd "/" and then returning the values after that.
+func breakdownURL(str string) string {
+
+	data := ""
+
+	//Itterates through the string recursively finding the / and removes the last bit of data until it find no more and the finally appends data + 1 creating the final title.
+	for i, v := range []byte(str) {
+		if string(v) == "/" {
+			data = str[i+1:]
+		}
+	}
+
+	return data
+}
+
+// writeResource ... Using the response it downloads the source into a folder named resources with another folder being the webpage name.
+func writeResource(resp *http.Response, url string, data string, word string) {
+	//Makes the required directory for each correct Operating System.
+	directory := filepath.Join("Resources", word)
+	os.MkdirAll(directory, 0777)
+	//Change the directory into the directory.
+	err := os.Chdir(directory)
+	//Check the error for changing the directory.
+	check(err)
+	//Create the resource with the correct resource name.
+	file, err := os.Create(data)
+	//Check the file's error.
+	check(err)
+	//Copies the datastream into the file.
+	io.Copy(file, resp.Body)
+	//When done switch back to the original directory.
+	//Create a .. directory thing.
+	back := filepath.Join("..", "..")
+	os.Chdir(back)
+	defer resp.Body.Close()
+
+}
+
+// writePage ... Creates the file with the name of word and copies the body of the HTTP request to it.
+func writePage(resp *http.Response, word string) *os.File {
 	//Creates the file with the name word.
-	file, err := os.Create(word)
+	file, err := os.Create(word + ".html") //Of the type .html
 	//Checks the error.
 	check(err)
 	//Writes to the file by copying the data.
 	io.Copy(file, resp.Body)
 	//Closes the file when done.
 	defer file.Close()
+	defer resp.Body.Close()
+	//Download resources using goQuery.
+	downloadResources(resp, word)
+
+	return file
 }
 
 // getURL ... Gets the url by parsing the terminal input using Os.Args[], returns the url.
