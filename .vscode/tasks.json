@@ -1,0 +1,18 @@
+{
+    "version": "0.1.0",
+    "command": "go",
+    "isShellCommand": true,
+    "showOutput": "silent",
+    "tasks": [
+        {
+            "taskName": "run",
+            "args": [ "-v", "${file}"],
+            "isBuildCommand": true
+        },
+        {
+            "taskName": "test",
+            "args": [ "-v", "${file}"],
+            "isTestCommand": true
+        }
+    ]
+}
